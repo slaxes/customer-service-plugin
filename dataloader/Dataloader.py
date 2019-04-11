@@ -11,6 +11,9 @@ class Dataloader:
     '''
     基础 Excel dataloader
 
+    Excel 表各列定义如下：
+    | 主问题 | 标准答案 | 问法 1 | 问法 2 | 问法 3 | ...
+
     Note: 这里特地使用 `.xlsx` 格式数据而不选用 `.csv` 格式，因为数据中本身就可能
     带有英文逗号 `,`。
 
@@ -88,11 +91,58 @@ class Dataloader:
         '''
         return self._answer_list[main_ques_idx]
 
+    def to_sqlite(self, path: str):
+        '''
+        Args:
+        - path: 导出数据库地址
+
+        数据库中将有以下几张表：
+        1. `main_ques` - id : int : 主问题 ID | ques : str : 主问题 |
+                         ans : str : 标准答案
+        2. `sub_ques` - id : int : 问法 ID | ques : str : 问法 |
+                        main_ques_id : str : 主问题 ID
+        '''
+        import os
+        if os.path.exists(path):
+            raise AssertionError("Database file at '{}' already exists!".format(path))
+        import sqlite3
+        with sqlite3.connect(path) as conn:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS main_ques (
+                    id      INTEGER     PRIMARY KEY,
+                    ques    TEXT                        NOT NULL,
+                    ans     TEXT                        NOT NULL
+                )''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS sub_ques (
+                    id              INTEGER     PRIMARY KEY     AUTOINCREMENT,
+                    ques            TEXT                        NOT NULL,
+                    main_ques_id    INTEGER                     NOT NULL
+                )''')
+            df = self.original_dataframe
+            for row in df.itertuples():
+                row_id, main_ques, ans = row[:3]
+                conn.execute(
+                    'INSERT INTO main_ques (id, ques, ans) VALUES (?,?,?)',
+                    (row_id, main_ques, ans)
+                )
+                for sub_ques in row[3:]:
+                    if pd.isnull(sub_ques):
+                        continue
+                    conn.execute(
+                        'INSERT INTO sub_ques (ques, main_ques_id) VALUES (?,?)',
+                        (sub_ques, row_id)
+                    )
+                conn.execute(
+                    'INSERT INTO sub_ques (ques, main_ques_id) VALUES (?,?)',
+                    (main_ques, row_id)
+                )
+
 
 '''Testing and Example'''
 
 if __name__ == '__main__':
-    loader = Dataloader('../xxxxxxxxxx.xlsx', '知识库')
+    loader = Dataloader('xxxxxxxxxxxxxxxxxxxxxxx', 'xxxxxxxxxxxx')
     print('数据集中一共有 {:d} 种问法。'.format(len(loader)))
     samp = loader.sample(3)
     print('从数据中共选取了 3 行：')
@@ -102,3 +152,4 @@ if __name__ == '__main__':
         print('对应标答：  ' + loader.get_answer(row[2]))
         print('')
     print('============================')
+    loader.to_sqlite('xxxxxxxxxxxxxxxxxxxx')
